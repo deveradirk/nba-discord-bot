@@ -1,0 +1,32 @@
+name: NBA Standings
+
+on:
+  schedule:
+    - cron: "8,23,38,53 17-23,0-9 * * *"   # every 15 min, 5 min after results
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-standings
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update standings
+        env:
+          WEBHOOK_STANDINGS: ${{ secrets.WEBHOOK_STANDINGS }}
+          API_NINJAS_KEY: ${{ secrets.API_NINJAS_KEY }}
+        run: python3 standings.py
+      - name: Save state
+        run: |
+          if [ -f standings_state.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add standings_state.json
+            git diff --staged --quiet || (git commit -m "Update standings state" && git pull --rebase && git push)
+          fi
