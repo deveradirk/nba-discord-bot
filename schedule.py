@@ -1,24 +1,18 @@
 import json
 import os
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 WEBHOOK = os.environ["WEBHOOK_SCHEDULE"]
+API_KEY = os.environ["BALLDONTLIE_API_KEY"]
 PH = ZoneInfo("Asia/Manila")
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://www.nba.com",
-    "Referer": "https://www.nba.com/",
-}
-SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json"
+UA = "Mozilla/5.0 (nba-discord-bot)"
 
 
 def get_json(url):
-    req = urllib.request.Request(url, headers=HEADERS)
+    req = urllib.request.Request(url, headers={"Authorization": API_KEY, "User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
@@ -27,36 +21,39 @@ def post(payload):
     req = urllib.request.Request(
         WEBHOOK,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json",
-                 "User-Agent": HEADERS["User-Agent"]},
+        headers={"Content-Type": "application/json", "User-Agent": UA},
         method="POST",
     )
     urllib.request.urlopen(req, timeout=30).read()
 
 
-def team_name(t):
-    city = (t.get("teamCity") or "").strip()
-    name = (t.get("teamName") or "").strip()
-    return f"{city} {name}".strip()
+def parse_time(g):
+    # Upcoming games carry their tip-off time in "datetime" (or "status")
+    for key in ("datetime", "status"):
+        val = g.get(key)
+        if isinstance(val, str) and "T" in val:
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00")).astimezone(PH)
+            except ValueError:
+                pass
+    return None
 
 
 target = (datetime.now(PH) + timedelta(days=1)).date()
 
-data = get_json(SCHEDULE_URL)
+# Games are listed by US date, so request the days around the PH target date
+dates = [(target + timedelta(days=d)).isoformat() for d in (-1, 0, 1)]
+query = urllib.parse.urlencode([("dates[]", d) for d in dates] + [("per_page", 100)])
+data = get_json(f"https://api.balldontlie.io/v1/games?{query}")
+
 games = {}
-for day in data["leagueSchedule"]["gameDates"]:
-    for g in day.get("games", []):
-        utc = g.get("gameDateTimeUTC")
-        if not utc:
-            continue
-        start = datetime.fromisoformat(utc.replace("Z", "+00:00")).astimezone(PH)
-        if start.date() != target:
-            continue
-        away = team_name(g.get("awayTeam", {}))
-        home = team_name(g.get("homeTeam", {}))
-        if not away or not home:
-            continue
-        games[g["gameId"]] = (start, away, home)
+for g in data.get("data", []):
+    start = parse_time(g)
+    if start is None or start.date() != target:
+        continue
+    away = g["visitor_team"]["full_name"]
+    home = g["home_team"]["full_name"]
+    games[g["id"]] = (start, away, home)
 
 title = f"🏀 NBA Games: {target.strftime('%A, %B %d, %Y')}"
 if games:
