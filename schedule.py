@@ -9,6 +9,7 @@ WEBHOOK = os.environ["WEBHOOK_SCHEDULE"]
 API_KEY = os.environ["BALLDONTLIE_API_KEY"]
 PH = ZoneInfo("Asia/Manila")
 UA = "Mozilla/5.0 (nba-discord-bot)"
+LOGO = "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png"
 
 
 def get_json(url):
@@ -70,6 +71,7 @@ post({
         "title": title,
         "description": description,
         "color": 0xF58426,
+        "thumbnail": {"url": LOGO},
         "footer": {"text": "All times in PH time (PHT)"},
     }]
 })
