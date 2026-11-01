@@ -6,11 +6,19 @@ from zoneinfo import ZoneInfo
 
 WEBHOOK = os.environ["WEBHOOK_SCHEDULE"]
 PH = ZoneInfo("Asia/Manila")
-UA = {"User-Agent": "Mozilla/5.0 (nba-discord-bot)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://www.nba.com",
+    "Referer": "https://www.nba.com/",
+}
+SCHEDULE_URL = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json"
 
 
 def get_json(url):
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
@@ -19,27 +27,36 @@ def post(payload):
     req = urllib.request.Request(
         WEBHOOK,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", **UA},
+        headers={"Content-Type": "application/json",
+                 "User-Agent": HEADERS["User-Agent"]},
         method="POST",
     )
     urllib.request.urlopen(req, timeout=30).read()
 
 
+def team_name(t):
+    city = (t.get("teamCity") or "").strip()
+    name = (t.get("teamName") or "").strip()
+    return f"{city} {name}".strip()
+
+
 target = (datetime.now(PH) + timedelta(days=1)).date()
 
-# ESPN groups games by US date, so check the days around the PH target date
-dates = [(target + timedelta(days=d)).strftime("%Y%m%d") for d in (-1, 0, 1)]
+data = get_json(SCHEDULE_URL)
 games = {}
-for d in dates:
-    url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={d}"
-    for ev in get_json(url).get("events", []):
-        start = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(PH)
+for day in data["leagueSchedule"]["gameDates"]:
+    for g in day.get("games", []):
+        utc = g.get("gameDateTimeUTC")
+        if not utc:
+            continue
+        start = datetime.fromisoformat(utc.replace("Z", "+00:00")).astimezone(PH)
         if start.date() != target:
             continue
-        comps = ev["competitions"][0]["competitors"]
-        home = next(c for c in comps if c["homeAway"] == "home")["team"]["displayName"]
-        away = next(c for c in comps if c["homeAway"] == "away")["team"]["displayName"]
-        games[ev["id"]] = (start, away, home)
+        away = team_name(g.get("awayTeam", {}))
+        home = team_name(g.get("homeTeam", {}))
+        if not away or not home:
+            continue
+        games[g["gameId"]] = (start, away, home)
 
 title = f"🏀 NBA Games: {target.strftime('%A, %B %d, %Y')}"
 if games:
