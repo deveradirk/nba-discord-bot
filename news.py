@@ -7,18 +7,25 @@ import urllib.request
 import xml.etree.ElementTree as XML
 
 WEBHOOK = os.environ["WEBHOOK_NEWS"]
-UA = {"User-Agent": "Mozilla/5.0 (nba-discord-bot)"}
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+HEADERS = {
+    "User-Agent": UA,
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 STATE = "seen.json"
 MAX_POSTS = 8
 
 FEEDS = [
     ("ESPN", "https://www.espn.com/espn/rss/nba/news"),
     ("CBS Sports", "https://www.cbssports.com/rss/headlines/nba/"),
+    ("Yahoo Sports", "https://sports.yahoo.com/nba/rss/"),
 ]
 
 
 def fetch(url):
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read()
 
@@ -27,7 +34,7 @@ def post(payload):
     req = urllib.request.Request(
         WEBHOOK,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", **UA},
+        headers={"Content-Type": "application/json", "User-Agent": UA},
         method="POST",
     )
     urllib.request.urlopen(req, timeout=30).read()
@@ -43,12 +50,14 @@ seen = [] if first_run else json.load(open(STATE))
 seen_set = set(seen)
 
 to_post = []
+feeds_ok = 0
 for source, url in FEEDS:
     try:
         root = XML.fromstring(fetch(url))
     except Exception as e:
         print(f"Feed failed ({source}): {e}")
         continue
+    feeds_ok += 1
     items = []
     for it in root.iter("item"):
         link = (it.findtext("link") or "").strip()
@@ -68,6 +77,10 @@ for source, url in FEEDS:
     to_post.extend(new)
     seen.extend(i["key"] for i in items if i["key"] not in seen_set)
     seen_set.update(i["key"] for i in items)
+    print(f"Feed OK ({source}): {len(items)} items, {len(new)} new")
+
+if feeds_ok == 0:
+    raise SystemExit("All news feeds failed")
 
 for item in list(reversed(to_post))[-MAX_POSTS:]:
     post({
