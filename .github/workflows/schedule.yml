@@ -10,8 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Pillow
+        run: pip install pillow
       - name: Post schedule
         env:
           WEBHOOK_SCHEDULE: ${{ secrets.WEBHOOK_SCHEDULE }}
           BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
-        run: python3 schedule.py
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python schedule.py
