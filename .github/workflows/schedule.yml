@@ -13,4 +13,5 @@ jobs:
       - name: Post schedule
         env:
           WEBHOOK_SCHEDULE: ${{ secrets.WEBHOOK_SCHEDULE }}
+          BALLDONTLIE_API_KEY: ${{ secrets.BALLDONTLIE_API_KEY }}
         run: python3 schedule.py
