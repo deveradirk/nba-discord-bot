@@ -1,0 +1,16 @@
+name: NBA Schedule
+
+on:
+  schedule:
+    - cron: "0 4 * * *"   # 12:00 NN PH time
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post schedule
+        env:
+          WEBHOOK_SCHEDULE: ${{ secrets.WEBHOOK_SCHEDULE }}
+        run: python3 schedule.py
