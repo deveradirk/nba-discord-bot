@@ -16,7 +16,7 @@ HEADERS = {
 }
 STATE = "seen.json"
 MAX_POSTS = 6
-ONLY_IMPORTANT = True   # False = post every new article
+ONLY_IMPORTANT = False   # False = post every new article
 
 FEEDS = [
     ("ESPN", "https://www.espn.com/espn/rss/nba/news"),
