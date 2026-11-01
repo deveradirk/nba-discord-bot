@@ -45,6 +45,26 @@ def clean(text):
     return html.unescape(text).strip()
 
 
+def find_image(it):
+    # Look for media:content, media:thumbnail, or an image enclosure
+    for el in it.iter():
+        tag = el.tag.split("}")[-1].lower()
+        url = el.get("url")
+        if tag in ("content", "thumbnail", "enclosure") and url and url.startswith("http"):
+            typ = (el.get("type") or "").lower()
+            medium = (el.get("medium") or "").lower()
+            if tag == "enclosure" and typ and not typ.startswith("image"):
+                continue
+            if tag == "content" and typ and not typ.startswith("image") and medium != "image":
+                continue
+            return url
+    # Fall back to an <img> tag inside the description
+    m = re.search(r'<img[^>]+src="([^"]+)"', it.findtext("description") or "")
+    if m and m.group(1).startswith("http"):
+        return html.unescape(m.group(1))
+    return None
+
+
 first_run = not os.path.exists(STATE)
 seen = [] if first_run else json.load(open(STATE))
 seen_set = set(seen)
@@ -69,6 +89,7 @@ for source, url in FEEDS:
             "title": clean(it.findtext("title")),
             "link": link,
             "desc": clean(it.findtext("description"))[:200],
+            "image": find_image(it),
             "source": source,
         })
     new = [i for i in items if i["key"] not in seen_set]
@@ -83,15 +104,16 @@ if feeds_ok == 0:
     raise SystemExit("All news feeds failed")
 
 for item in list(reversed(to_post))[-MAX_POSTS:]:
-    post({
-        "embeds": [{
-            "title": item["title"][:256],
-            "url": item["link"],
-            "description": item["desc"],
-            "color": 0x1D428A,
-            "footer": {"text": item["source"]},
-        }]
-    })
+    embed = {
+        "title": item["title"][:256],
+        "url": item["link"],
+        "description": item["desc"],
+        "color": 0x1D428A,
+        "footer": {"text": item["source"]},
+    }
+    if item["image"]:
+        embed["image"] = {"url": item["image"]}
+    post({"embeds": [embed]})
     time.sleep(1.5)
 
 json.dump(seen[-500:], open(STATE, "w"))
